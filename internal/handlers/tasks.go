@@ -1,63 +1,69 @@
 package handlers
 
 import (
-	"encoding/json"
+	"io"
 	"net/http"
-	"time"
 
+	tasks "github.com/PinceredCoder/RestGo/api/proto/v1"
 	"github.com/PinceredCoder/RestGo/internal/errors"
-	"github.com/PinceredCoder/RestGo/internal/models"
 	"github.com/go-chi/chi/v5"
-	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type TaskHandler struct {
-	tasks    []models.Task
-	validate *validator.Validate
+	tasks []*tasks.Task
 }
 
 func NewTaskHandler() *TaskHandler {
 	return &TaskHandler{
-		tasks:    make([]models.Task, 0),
-		validate: validator.New(),
+		tasks: make([]*tasks.Task, 0),
 	}
 }
 
 func (h *TaskHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	if h.tasks == nil {
-		h.tasks = []models.Task{}
+	response := &tasks.ListTasksResponse{
+		Tasks: h.tasks,
 	}
 
-	if err := json.NewEncoder(w).Encode(h.tasks); err != nil {
+	data, err := protojson.Marshal(response)
+	if err != nil {
 		errors.RespondWithError(w, http.StatusInternalServerError,
 			errors.NewInternalError("Failed to encode response"))
 		return
 	}
+
+	w.Write(data)
 }
 
 func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
-	var req models.CreateTaskRequest
+	data, err := io.ReadAll(r.Body)
+	if err != nil {
+		errors.RespondWithError(w, http.StatusBadRequest,
+			errors.NewBadRequestError("Failed to read request body"))
+		return
+	}
 
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	var req tasks.CreateTaskRequest
+	if err := protojson.Unmarshal(data, &req); err != nil {
 		errors.RespondWithError(w, http.StatusBadRequest,
 			errors.NewBadRequestError("Invalid JSON format"))
 		return
 	}
 
-	if err := h.validate.Struct(req); err != nil {
-		validationErrors := h.extractValidationErrors(err)
-		errors.RespondWithError(w, http.StatusBadRequest,
-			errors.NewValidationError("Validation failed", validationErrors))
+	if err := req.Validate(); err != nil {
+		apiErr := h.convertValidationError(err)
+		errors.RespondWithError(w, http.StatusBadRequest, apiErr)
 		return
 	}
 
-	var now = time.Now()
+	now := timestamppb.Now()
 
-	task := models.Task{
-		ID:          uuid.New().String(),
+	task := &tasks.Task{
+		Id:          uuid.New().String(),
 		Title:       req.Title,
 		Description: req.Description,
 		Completed:   false,
@@ -67,18 +73,40 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	h.tasks = append(h.tasks, task)
 
+	response := &tasks.GetTaskResponse{
+		Task: task,
+	}
+
+	data, err = protojson.Marshal(response)
+	if err != nil {
+		errors.RespondWithError(w, http.StatusInternalServerError,
+			errors.NewInternalError("Failed to encode response"))
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(task)
+	w.Write(data)
 }
 
 func (h *TaskHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
 	for _, task := range h.tasks {
-		if task.ID == id {
+		if task.Id == id {
+			response := &tasks.GetTaskResponse{
+				Task: task,
+			}
+
+			data, err := protojson.Marshal(response)
+			if err != nil {
+				errors.RespondWithError(w, http.StatusInternalServerError,
+					errors.NewInternalError("Failed to encode response"))
+				return
+			}
+
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(task)
+			w.Write(data)
 			return
 		}
 	}
@@ -90,21 +118,28 @@ func (h *TaskHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
-	var req models.UpdateTaskRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	data, err := io.ReadAll(r.Body)
+	if err != nil {
+		errors.RespondWithError(w, http.StatusBadRequest,
+			errors.NewBadRequestError("Failed to read request body"))
+		return
+	}
+
+	var req tasks.UpdateTaskRequest
+	if err := protojson.Unmarshal(data, &req); err != nil {
 		errors.RespondWithError(w, http.StatusBadRequest,
 			errors.NewBadRequestError("Invalid JSON format"))
 		return
 	}
 
-	if err := h.validate.Struct(req); err != nil {
-		validationErrors := h.extractValidationErrors(err)
-		errors.RespondWithError(w, http.StatusBadRequest,
-			errors.NewValidationError("Validation failed", validationErrors))
+	if err := req.Validate(); err != nil {
+		apiErr := h.convertValidationError(err)
+		errors.RespondWithError(w, http.StatusBadRequest, apiErr)
 		return
 	}
+
 	for i, task := range h.tasks {
-		if task.ID == id {
+		if task.Id == id {
 			h.tasks[i].Title = req.Title
 			h.tasks[i].Description = req.Description
 
@@ -112,10 +147,21 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 				h.tasks[i].Completed = *req.Completed
 			}
 
-			h.tasks[i].UpdatedAt = time.Now()
+			h.tasks[i].UpdatedAt = timestamppb.Now()
+
+			response := &tasks.GetTaskResponse{
+				Task: h.tasks[i],
+			}
+
+			data, err := protojson.Marshal(response)
+			if err != nil {
+				errors.RespondWithError(w, http.StatusInternalServerError,
+					errors.NewInternalError("Failed to encode response"))
+				return
+			}
 
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(h.tasks[i])
+			w.Write(data)
 			return
 		}
 	}
@@ -128,7 +174,7 @@ func (h *TaskHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
 	for i, task := range h.tasks {
-		if task.ID == id {
+		if task.Id == id {
 			h.tasks = append(h.tasks[:i], h.tasks[i+1:]...)
 			w.WriteHeader(http.StatusNoContent)
 			return
@@ -137,33 +183,4 @@ func (h *TaskHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	errors.RespondWithError(w, http.StatusNotFound,
 		errors.NewNotFoundError("Task not found"))
-}
-
-func (h *TaskHandler) extractValidationErrors(err error) []errors.ValidationErrorDetail {
-	var details []errors.ValidationErrorDetail
-
-	if validationErrors, ok := err.(validator.ValidationErrors); ok {
-		for _, fieldError := range validationErrors {
-			detail := errors.ValidationErrorDetail{
-				Field:   fieldError.Field(),
-				Message: h.getValidationMessage(fieldError),
-			}
-			details = append(details, detail)
-		}
-	}
-
-	return details
-}
-
-func (h *TaskHandler) getValidationMessage(fe validator.FieldError) string {
-	switch fe.Tag() {
-	case "required":
-		return "This field is required"
-	case "min":
-		return "Value is too short (minimum " + fe.Param() + " characters)"
-	case "max":
-		return "Value is too long (maximum " + fe.Param() + " characters)"
-	default:
-		return "Invalid value"
-	}
 }
