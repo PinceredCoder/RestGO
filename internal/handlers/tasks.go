@@ -3,6 +3,7 @@ package handlers
 import (
 	"io"
 	"net/http"
+	"sync"
 
 	tasks "github.com/PinceredCoder/RestGo/api/proto/v1"
 	"github.com/PinceredCoder/RestGo/internal/errors"
@@ -13,6 +14,7 @@ import (
 )
 
 type TaskHandler struct {
+	mu    sync.RWMutex
 	tasks map[string]*tasks.Task
 }
 
@@ -25,10 +27,13 @@ func NewTaskHandler() *TaskHandler {
 func (h *TaskHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
+	// Read lock: multiple readers can access simultaneously
+	h.mu.RLock()
 	taskList := make([]*tasks.Task, 0, len(h.tasks))
 	for _, task := range h.tasks {
 		taskList = append(taskList, task)
 	}
+	h.mu.RUnlock()
 
 	response := &tasks.ListTasksResponse{
 		Tasks: taskList,
@@ -76,7 +81,10 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 		UpdatedAt:   now,
 	}
 
+	// Write lock: exclusive access for map modification
+	h.mu.Lock()
 	h.tasks[task.Id] = task
+	h.mu.Unlock()
 
 	response := &tasks.GetTaskResponse{
 		Task: task,
@@ -97,7 +105,11 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 func (h *TaskHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
+	// Read lock: allows concurrent reads
+	h.mu.RLock()
 	task, exists := h.tasks[id]
+	h.mu.RUnlock()
+
 	if !exists {
 		errors.RespondWithError(w, http.StatusNotFound,
 			errors.NewNotFoundError("Task not found"))
@@ -142,8 +154,11 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Write lock: modifying task data
+	h.mu.Lock()
 	task, exists := h.tasks[id]
 	if !exists {
+		h.mu.Unlock()
 		errors.RespondWithError(w, http.StatusNotFound,
 			errors.NewNotFoundError("Task not found"))
 		return
@@ -157,6 +172,7 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	task.UpdatedAt = timestamppb.Now()
+	h.mu.Unlock()
 
 	response := &tasks.GetTaskResponse{
 		Task: task,
@@ -176,12 +192,18 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 func (h *TaskHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
-	if _, exists := h.tasks[id]; !exists {
+	// Write lock: deleting from map
+	h.mu.Lock()
+	_, exists := h.tasks[id]
+	if !exists {
+		h.mu.Unlock()
 		errors.RespondWithError(w, http.StatusNotFound,
 			errors.NewNotFoundError("Task not found"))
 		return
 	}
 
 	delete(h.tasks, id)
+	h.mu.Unlock()
+
 	w.WriteHeader(http.StatusNoContent)
 }
