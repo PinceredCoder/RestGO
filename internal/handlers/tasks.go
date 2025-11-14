@@ -15,12 +15,12 @@ import (
 
 type TaskHandler struct {
 	mu    sync.RWMutex
-	tasks map[string]*tasks.Task
+	tasks map[uuid.UUID]*tasks.Task
 }
 
 func NewTaskHandler() *TaskHandler {
 	return &TaskHandler{
-		tasks: make(map[string]*tasks.Task),
+		tasks: make(map[uuid.UUID]*tasks.Task),
 	}
 }
 
@@ -71,9 +71,10 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	now := timestamppb.Now()
+	taskID := uuid.New()
 
 	task := &tasks.Task{
-		Id:          uuid.New().String(),
+		Id:          taskID.String(),
 		Title:       req.Title,
 		Description: req.Description,
 		Completed:   false,
@@ -83,7 +84,7 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	// Write lock: exclusive access for map modification
 	h.mu.Lock()
-	h.tasks[task.Id] = task
+	h.tasks[taskID] = task
 	h.mu.Unlock()
 
 	response := &tasks.GetTaskResponse{
@@ -103,7 +104,14 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *TaskHandler) GetByID(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	idStr := chi.URLParam(r, "id")
+
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		errors.RespondWithError(w, http.StatusBadRequest,
+			errors.NewBadRequestError("Invalid task ID format"))
+		return
+	}
 
 	// Read lock: allows concurrent reads
 	h.mu.RLock()
@@ -132,7 +140,14 @@ func (h *TaskHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	idStr := chi.URLParam(r, "id")
+
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		errors.RespondWithError(w, http.StatusBadRequest,
+			errors.NewBadRequestError("Invalid task ID format"))
+		return
+	}
 
 	data, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -190,7 +205,14 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *TaskHandler) Delete(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+	idStr := chi.URLParam(r, "id")
+
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		errors.RespondWithError(w, http.StatusBadRequest,
+			errors.NewBadRequestError("Invalid task ID format"))
+		return
+	}
 
 	// Write lock: deleting from map
 	h.mu.Lock()

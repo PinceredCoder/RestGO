@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	tasks "github.com/PinceredCoder/RestGo/api/proto/v1"
+	"github.com/google/uuid"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -17,8 +18,9 @@ func setupHandler() *TaskHandler {
 
 	// Add a test task
 	now := timestamppb.Now()
-	h.tasks["test-id-1"] = &tasks.Task{
-		Id:          "test-id-1",
+	testID := uuid.MustParse("550e8400-e29b-41d4-a716-446655440000")
+	h.tasks[testID] = &tasks.Task{
+		Id:          testID.String(),
 		Title:       "Test Task",
 		Description: "Test Description",
 		Completed:   false,
@@ -79,8 +81,9 @@ func TestGetAll(t *testing.T) {
 		t.Errorf("expected 1 task, got %d", len(response.Tasks))
 	}
 
-	if response.Tasks[0].Id != "test-id-1" {
-		t.Errorf("expected task ID 'test-id-1', got '%s'", response.Tasks[0].Id)
+	expectedID := "550e8400-e29b-41d4-a716-446655440000"
+	if response.Tasks[0].Id != expectedID {
+		t.Errorf("expected task ID '%s', got '%s'", expectedID, response.Tasks[0].Id)
 	}
 }
 
@@ -157,8 +160,13 @@ func TestCreate(t *testing.T) {
 	}
 
 	// Verify task was added to map
+	taskID, err := uuid.Parse(task.Id)
+	if err != nil {
+		t.Fatalf("failed to parse task ID: %v", err)
+	}
+
 	h.mu.RLock()
-	_, exists := h.tasks[task.Id]
+	_, exists := h.tasks[taskID]
 	h.mu.RUnlock()
 
 	if !exists {
@@ -297,8 +305,9 @@ func BenchmarkGetAll(b *testing.B) {
 	// Add more tasks for realistic benchmark
 	for i := 0; i < 100; i++ {
 		now := timestamppb.Now()
-		h.tasks[string(rune(i))] = &tasks.Task{
-			Id:          string(rune(i)),
+		taskID := uuid.New()
+		h.tasks[taskID] = &tasks.Task{
+			Id:          taskID.String(),
 			Title:       "Task",
 			Description: "Description",
 			Completed:   false,

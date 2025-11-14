@@ -8,6 +8,7 @@ import (
 
 	tasks "github.com/PinceredCoder/RestGo/api/proto/v1"
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
@@ -60,9 +61,10 @@ func TestIntegrationGetByID(t *testing.T) {
 	router, h := setupRouter()
 
 	// Pre-populate a task
-	taskID := "test-id-123"
+	taskUUID := uuid.MustParse("550e8400-e29b-41d4-a716-446655440001")
+	taskID := taskUUID.String()
 	h.mu.Lock()
-	h.tasks[taskID] = &tasks.Task{
+	h.tasks[taskUUID] = &tasks.Task{
 		Id:          taskID,
 		Title:       "Test Task",
 		Description: "Test Description",
@@ -93,7 +95,9 @@ func TestIntegrationGetByID(t *testing.T) {
 func TestIntegrationGetByIDNotFound(t *testing.T) {
 	router, _ := setupRouter()
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/tasks/nonexistent-id", nil)
+	// Use a valid UUID that doesn't exist
+	nonExistentID := "550e8400-e29b-41d4-a716-999999999999"
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/tasks/"+nonExistentID, nil)
 	w := httptest.NewRecorder()
 
 	router.ServeHTTP(w, req)
@@ -108,9 +112,10 @@ func TestIntegrationUpdate(t *testing.T) {
 	router, h := setupRouter()
 
 	// Pre-populate a task
-	taskID := "update-test-id"
+	taskUUID := uuid.MustParse("550e8400-e29b-41d4-a716-446655440002")
+	taskID := taskUUID.String()
 	h.mu.Lock()
-	h.tasks[taskID] = &tasks.Task{
+	h.tasks[taskUUID] = &tasks.Task{
 		Id:          taskID,
 		Title:       "Original Title",
 		Description: "Original Description",
@@ -152,9 +157,10 @@ func TestIntegrationUpdate(t *testing.T) {
 func TestIntegrationUpdateCompleted(t *testing.T) {
 	router, h := setupRouter()
 
-	taskID := "complete-test-id"
+	taskUUID := uuid.MustParse("550e8400-e29b-41d4-a716-446655440003")
+	taskID := taskUUID.String()
 	h.mu.Lock()
-	h.tasks[taskID] = &tasks.Task{
+	h.tasks[taskUUID] = &tasks.Task{
 		Id:          taskID,
 		Title:       "Task to Complete",
 		Description: "Description",
@@ -194,9 +200,10 @@ func TestIntegrationUpdateCompleted(t *testing.T) {
 func TestIntegrationDelete(t *testing.T) {
 	router, h := setupRouter()
 
-	taskID := "delete-test-id"
+	taskUUID := uuid.MustParse("550e8400-e29b-41d4-a716-446655440004")
+	taskID := taskUUID.String()
 	h.mu.Lock()
-	h.tasks[taskID] = &tasks.Task{
+	h.tasks[taskUUID] = &tasks.Task{
 		Id:          taskID,
 		Title:       "Task to Delete",
 		Description: "Will be deleted",
@@ -215,7 +222,7 @@ func TestIntegrationDelete(t *testing.T) {
 
 	// Verify task was deleted
 	h.mu.RLock()
-	_, exists := h.tasks[taskID]
+	_, exists := h.tasks[taskUUID]
 	h.mu.RUnlock()
 
 	if exists {
@@ -227,7 +234,9 @@ func TestIntegrationDelete(t *testing.T) {
 func TestIntegrationDeleteNotFound(t *testing.T) {
 	router, _ := setupRouter()
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/tasks/nonexistent", nil)
+	// Use a valid UUID that doesn't exist
+	nonExistentID := "550e8400-e29b-41d4-a716-999999999998"
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/tasks/"+nonExistentID, nil)
 	w := httptest.NewRecorder()
 
 	router.ServeHTTP(w, req)
