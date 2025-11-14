@@ -13,20 +13,25 @@ import (
 )
 
 type TaskHandler struct {
-	tasks []*tasks.Task
+	tasks map[string]*tasks.Task
 }
 
 func NewTaskHandler() *TaskHandler {
 	return &TaskHandler{
-		tasks: make([]*tasks.Task, 0),
+		tasks: make(map[string]*tasks.Task),
 	}
 }
 
 func (h *TaskHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
+	taskList := make([]*tasks.Task, 0, len(h.tasks))
+	for _, task := range h.tasks {
+		taskList = append(taskList, task)
+	}
+
 	response := &tasks.ListTasksResponse{
-		Tasks: h.tasks,
+		Tasks: taskList,
 	}
 
 	data, err := protojson.Marshal(response)
@@ -71,7 +76,7 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 		UpdatedAt:   now,
 	}
 
-	h.tasks = append(h.tasks, task)
+	h.tasks[task.Id] = task
 
 	response := &tasks.GetTaskResponse{
 		Task: task,
@@ -92,27 +97,26 @@ func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
 func (h *TaskHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
-	for _, task := range h.tasks {
-		if task.Id == id {
-			response := &tasks.GetTaskResponse{
-				Task: task,
-			}
-
-			data, err := protojson.Marshal(response)
-			if err != nil {
-				errors.RespondWithError(w, http.StatusInternalServerError,
-					errors.NewInternalError("Failed to encode response"))
-				return
-			}
-
-			w.Header().Set("Content-Type", "application/json")
-			w.Write(data)
-			return
-		}
+	task, exists := h.tasks[id]
+	if !exists {
+		errors.RespondWithError(w, http.StatusNotFound,
+			errors.NewNotFoundError("Task not found"))
+		return
 	}
 
-	errors.RespondWithError(w, http.StatusNotFound,
-		errors.NewNotFoundError("Task not found"))
+	response := &tasks.GetTaskResponse{
+		Task: task,
+	}
+
+	data, err := protojson.Marshal(response)
+	if err != nil {
+		errors.RespondWithError(w, http.StatusInternalServerError,
+			errors.NewInternalError("Failed to encode response"))
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(data)
 }
 
 func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
@@ -138,49 +142,46 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	for i, task := range h.tasks {
-		if task.Id == id {
-			h.tasks[i].Title = req.Title
-			h.tasks[i].Description = req.Description
-
-			if req.Completed != nil {
-				h.tasks[i].Completed = *req.Completed
-			}
-
-			h.tasks[i].UpdatedAt = timestamppb.Now()
-
-			response := &tasks.GetTaskResponse{
-				Task: h.tasks[i],
-			}
-
-			data, err := protojson.Marshal(response)
-			if err != nil {
-				errors.RespondWithError(w, http.StatusInternalServerError,
-					errors.NewInternalError("Failed to encode response"))
-				return
-			}
-
-			w.Header().Set("Content-Type", "application/json")
-			w.Write(data)
-			return
-		}
+	task, exists := h.tasks[id]
+	if !exists {
+		errors.RespondWithError(w, http.StatusNotFound,
+			errors.NewNotFoundError("Task not found"))
+		return
 	}
 
-	errors.RespondWithError(w, http.StatusNotFound,
-		errors.NewNotFoundError("Task not found"))
+	task.Title = req.Title
+	task.Description = req.Description
+
+	if req.Completed != nil {
+		task.Completed = *req.Completed
+	}
+
+	task.UpdatedAt = timestamppb.Now()
+
+	response := &tasks.GetTaskResponse{
+		Task: task,
+	}
+
+	data, err = protojson.Marshal(response)
+	if err != nil {
+		errors.RespondWithError(w, http.StatusInternalServerError,
+			errors.NewInternalError("Failed to encode response"))
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(data)
 }
 
 func (h *TaskHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
-	for i, task := range h.tasks {
-		if task.Id == id {
-			h.tasks = append(h.tasks[:i], h.tasks[i+1:]...)
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
+	if _, exists := h.tasks[id]; !exists {
+		errors.RespondWithError(w, http.StatusNotFound,
+			errors.NewNotFoundError("Task not found"))
+		return
 	}
 
-	errors.RespondWithError(w, http.StatusNotFound,
-		errors.NewNotFoundError("Task not found"))
+	delete(h.tasks, id)
+	w.WriteHeader(http.StatusNoContent)
 }
