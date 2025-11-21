@@ -1,0 +1,135 @@
+GET http://localhost:8080/health
+
+###
+
+POST http://localhost:8080/api/v1/tasks
+Content-Type: application/json
+
+{
+    "title": "Learn Go",
+    "description": "Build a REST API with protobuf"
+}
+
+### 
+
+POST http://localhost:8080/api/v1/tasks
+Content-Type: application/json
+
+{
+    "title": "Learn Go",
+    "description": ""
+}
+
+### 
+
+POST http://localhost:8080/api/v1/tasks
+Content-Type: application/json
+
+{
+    "title": "Learn Go",
+    "description": "Write comprehensive unit tests for all handlers including edge cases, error handling, and validation. Make sure to cover happy paths and sad paths."
+}
+
+### 
+
+POST http://localhost:8080/api/v1/tasks
+Content-Type: application/json
+
+{
+    "title": "",
+    "description": "This should fail"
+}
+
+### 
+
+POST http://localhost:8080/api/v1/tasks
+Content-Type: application/json
+
+{
+    "title": "This is a very long title that exceeds the maximum length of 100 characters allowed by our validation rules",
+    "description": "Testing validation"
+}
+
+
+### 
+
+POST http://localhost:8080/api/v1/tasks
+Content-Type: application/json
+
+{
+    "description": "Only description, no title"
+}
+
+### 
+
+POST http://localhost:8080/api/v1/tasks
+Content-Type: application/json
+
+{
+    "title": "Broken JSON",
+    "description": {}
+}
+
+###
+
+# @name getAllTasks
+GET http://localhost:8080/api/v1/tasks
+
+### 
+
+@taskId = {{getAllTasks.response.body.$.[0].id}}
+
+GET http://localhost:8080/api/v1/tasks/{{taskId}}
+
+###
+
+GET http://localhost:8080/api/v1/tasks/nonexistent-id-12345
+
+###
+
+PUT http://localhost:8080/api/v1/tasks/{{taskId}}
+Content-Type: application/json
+
+{
+    "title": "Learn Go - Updated",
+    "description": "Build a REST API with protobuf and validation"
+}
+
+### 
+
+PUT http://localhost:8080/api/v1/tasks/{{taskId}}
+Content-Type: application/json
+
+{
+    "title": "Learn Go - Completed",
+    "description": "Successfully built a REST API",
+    "completed": true
+}
+
+###
+
+PUT http://localhost:8080/api/v1/tasks/{{taskId}}
+Content-Type: application/json
+
+{
+    "title": "New title only",
+    "description": "Same description"
+}
+
+###
+
+PUT http://localhost:8080/api/v1/tasks/{{taskId}}
+Content-Type: application/json
+
+{
+    "title": "",
+    "description": "Empty title should fail"
+}
+
+###
+
+DELETE http://localhost:8080/api/v1/tasks/{{taskId}}
+
+###
+
+GET http://localhost:8080/api/v1/tasks/{{taskId}}
