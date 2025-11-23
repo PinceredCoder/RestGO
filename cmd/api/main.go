@@ -4,27 +4,45 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
+	"os"
+	"time"
 
 	"github.com/PinceredCoder/restGo/internal/database"
 	"github.com/PinceredCoder/restGo/internal/handlers"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/lmittmann/tint"
 )
 
 func main() {
+	// Set up beautiful colored logging with tint
+	logger := slog.New(
+		tint.NewHandler(os.Stdout, &tint.Options{
+			Level:      slog.LevelInfo,
+			TimeFormat: time.Kitchen, // "3:04PM" format
+		}),
+	)
+	slog.SetDefault(logger)
+
+	logger.Info("Starting restGo API server")
+
 	r := chi.NewRouter()
 
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
+	logger.Info("Connecting to MongoDB", "uri", "mongodb://127.0.0.1:27017", "database", "tasks")
 	db, err := database.NewMongoDatabase(context.Background(), "mongodb://127.0.0.1:27017", "tasks")
 	if err != nil {
+		logger.Error("Failed to connect to MongoDB", "error", err)
 		log.Fatalf("Failed to connect to DB: %v", err)
 	}
 	defer db.Disconnect(context.Background())
+	logger.Info("Successfully connected to MongoDB")
 
-	taskHandler := handlers.NewTaskHandler(db)
+	taskHandler := handlers.NewTaskHandler(db, logger)
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Route("/tasks", func(r chi.Router) {

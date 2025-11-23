@@ -3,8 +3,10 @@ package handlers
 import (
 	"bytes"
 	"context"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	tasks "github.com/PinceredCoder/restGo/api/proto/v1"
@@ -16,7 +18,11 @@ import (
 // Test helper: creates a task handler with mock database
 func setupHandler() *TaskHandler {
 	mockDB := NewMockDatabase()
-	return NewTaskHandler(mockDB)
+	// Use a logger that discards output for tests
+	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
+		Level: slog.LevelError, // Only log errors in tests
+	}))
+	return NewTaskHandler(mockDB, logger)
 }
 
 // Test helper: creates a task handler with a pre-populated task
@@ -41,7 +47,10 @@ func setupHandlerWithTask() (*TaskHandler, uuid.UUID) {
 // TestNewTaskHandler tests the constructor
 func TestNewTaskHandler(t *testing.T) {
 	mockDB := NewMockDatabase()
-	h := NewTaskHandler(mockDB)
+	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
+		Level: slog.LevelError,
+	}))
+	h := NewTaskHandler(mockDB, logger)
 
 	if h == nil {
 		t.Fatal("NewTaskHandler() returned nil")
@@ -49,6 +58,10 @@ func TestNewTaskHandler(t *testing.T) {
 
 	if h.db == nil {
 		t.Error("database is nil")
+	}
+
+	if h.logger == nil {
+		t.Error("logger is nil")
 	}
 }
 

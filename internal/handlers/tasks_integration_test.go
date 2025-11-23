@@ -3,8 +3,10 @@ package handlers
 import (
 	"bytes"
 	"context"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	tasks "github.com/PinceredCoder/restGo/api/proto/v1"
@@ -19,7 +21,10 @@ import (
 func setupRouter() (*chi.Mux, *TaskHandler) {
 	r := chi.NewRouter()
 	mockDB := NewMockDatabase()
-	h := NewTaskHandler(mockDB)
+	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
+		Level: slog.LevelError, // Only log errors in tests
+	}))
+	h := NewTaskHandler(mockDB, logger)
 
 	r.Get("/api/v1/tasks", h.GetAll)
 	r.Post("/api/v1/tasks", h.Create)
